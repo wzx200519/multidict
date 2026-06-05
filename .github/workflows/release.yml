@@ -1,0 +1,131 @@
+---
+
+name: Release Wheels
+
+on:
+  push:
+    tags:
+    - v*
+
+permissions:
+  contents: read
+
+env:
+  FORCE_COLOR: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+
+jobs:
+  check-version:
+    name: Check PyPI version
+    runs-on: ubuntu-latest
+    outputs:
+      package-name: ${{ steps.version-check.outputs.package_name }}
+      package-version: ${{ steps.version-check.outputs.package_version }}
+      version-exists: ${{ steps.version-check.outputs.pypi_version_exists }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Check whether the version already exists on PyPI
+      id: version-check
+      run: >-
+        python tools/check_pypi_version.py
+        --github-output "${GITHUB_OUTPUT}"
+    - name: Mark release as skipped when the version is already published
+      if: steps.version-check.outputs.pypi_version_exists == 'true'
+      run: >-
+        echo "${{ steps.version-check.outputs.package_name }}
+        ${{ steps.version-check.outputs.package_version }} is already on PyPI;
+        skipping wheel builds and upload." >> "${GITHUB_STEP_SUMMARY}"
+
+  build-wheels:
+    name: Build ${{ matrix.display-name }} wheels
+    needs:
+    - check-version
+    if: needs.check-version.outputs.version-exists != 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - display-name: linux-x86_64
+          runner: ubuntu-latest
+          platform: linux
+          arch: x86_64
+          artifact-name: wheels-linux-x86_64
+          qemu: false
+        - display-name: linux-aarch64
+          runner: ubuntu-latest
+          platform: linux
+          arch: aarch64
+          artifact-name: wheels-linux-aarch64
+          qemu: true
+        - display-name: linux-armv7l
+          runner: ubuntu-latest
+          platform: linux
+          arch: armv7l
+          artifact-name: wheels-linux-armv7l
+          qemu: true
+        - display-name: macos
+          runner: macos-latest
+          platform: macos
+          arch: x86_64 arm64
+          artifact-name: wheels-macos
+          qemu: false
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up QEMU
+      if: matrix.qemu
+      uses: docker/setup-qemu-action@v4
+      with:
+        platforms: all
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v3.4.1
+      env:
+        CIBW_ARCHS_LINUX: ${{ matrix.platform == 'linux' && matrix.arch || '' }}
+        CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos' && matrix.arch || '' }}
+        CIBW_BEFORE_ALL_LINUX: >-
+          python -m pip install --upgrade uv &&
+          (yum install -y libffi-devel ||
+          apk add --upgrade libffi-dev ||
+          (apt-get update && apt-get install -y libffi-dev))
+      with:
+        extras: uv
+        package-dir: .
+    - name: Upload built wheels
+      uses: actions/upload-artifact@v7
+      with:
+        if-no-files-found: error
+        name: ${{ matrix.artifact-name }}
+        path: wheelhouse/*.whl
+
+  publish:
+    name: Publish wheels to PyPI
+    needs:
+    - check-version
+    - build-wheels
+    if: needs.check-version.outputs.version-exists != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: >-
+        https://pypi.org/project/${{ needs.check-version.outputs.package-name }}/
+    steps:
+    - name: Download wheel artifacts
+      uses: actions/download-artifact@v8
+      with:
+        pattern: wheels-*
+        merge-multiple: true
+        path: dist
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v6
+    - name: Publish wheels
+      env:
+        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      run: >-
+        uv publish --token "${UV_PUBLISH_TOKEN}" dist/*.whl
