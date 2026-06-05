@@ -30,11 +30,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            archs: x86_64 aarch64 armv7l
-          - os: macos-latest
-            archs: x86_64 arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -48,15 +43,12 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
 
-      - name: Install cibuildwheel
-        run: uv pip install --system cibuildwheel
-
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21
         env:
-          CIBW_BUILD_FRONTEND: uv
-          CIBW_ARCHS_LINUX: ${{ matrix.archs }}
-          CIBW_ARCHS_MACOS: ${{ matrix.archs }}
+          CIBW_BUILD_FRONTEND: build[uv]
+          CIBW_ARCHS_LINUX: x86_64 aarch64 armv7l
+          CIBW_ARCHS_MACOS: x86_64 arm64
           CIBW_SKIP: pp* cp36-* cp37-* cp38-* cp39-*
           CIBW_BUILD_VERBOSITY: 1
 
