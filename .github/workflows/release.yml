@@ -1,0 +1,193 @@
+---
+
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  FORCE_COLOR: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+  PROJECT_NAME: multidict
+  PYTHON_LATEST: 3.x
+
+
+jobs:
+
+  pre-setup:
+    name: Pre-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    defaults:
+      run:
+        shell: python
+    outputs:
+      dists-artifact-name: python-package-distributions
+      sdist-name: ${{ env.PROJECT_NAME }}-*.tar.gz
+      wheel-name: ${{ env.PROJECT_NAME }}-*.whl
+    steps:
+    - run: print('No-op')
+
+
+  build-sdist:
+    name: Build sdist
+    needs:
+    - pre-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      sdist-filename: ${{ steps.dist-filenames.outputs.sdist-filename }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up Python ${{ env.PYTHON_LATEST }}
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ env.PYTHON_LATEST }}
+    - name: Install build
+      run: python -Im pip install build
+    - name: Build sdist
+      env:
+        MULTIDICT_NO_EXTENSIONS: Y
+      run: python -Im build
+    - name: Determine sdist filename
+      id: dist-filenames
+      run: |
+        echo -n "sdist-filename=" >> "${GITHUB_OUTPUT}"
+        basename "$(ls -1 dist/${{ needs.pre-setup.outputs.sdist-name }})" \
+          >> "${GITHUB_OUTPUT}"
+      shell: bash
+    - name: Upload sdist artifact
+      uses: actions/upload-artifact@v7
+      with:
+        if-no-files-found: error
+        name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+        path: dist/${{ steps.dist-filenames.outputs.sdist-filename }}
+        retention-days: 7
+
+
+  build-wheels-x86-64:
+    name: Build wheels on Linux x86_64
+    needs:
+    - build-sdist
+    - pre-setup
+    uses: ./.github/workflows/reusable-cibuildwheel.yml
+    with:
+      check-name: Build wheels on Linux x86_64
+      runner-vm-os: ubuntu-latest
+      timeout-minutes: 30
+      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
+      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+      environment-variables: |-
+        CIBW_ARCHS_LINUX=x86_64
+        CIBW_SKIP=*-musllinux_*
+
+
+  build-wheels-aarch64:
+    name: Build wheels on Linux aarch64
+    needs:
+    - build-sdist
+    - pre-setup
+    uses: ./.github/workflows/reusable-cibuildwheel.yml
+    with:
+      check-name: Build wheels on Linux aarch64
+      runner-vm-os: ubuntu-24.04-arm
+      timeout-minutes: 30
+      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
+      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+      environment-variables: |-
+        CIBW_ARCHS_LINUX=aarch64
+        CIBW_SKIP=*-musllinux_*
+
+
+  build-wheels-armv7l:
+    name: Build wheels on Linux armv7l
+    needs:
+    - build-sdist
+    - pre-setup
+    uses: ./.github/workflows/reusable-cibuildwheel.yml
+    with:
+      check-name: Build wheels on Linux armv7l
+      qemu: true
+      runner-vm-os: ubuntu-24.04-arm
+      timeout-minutes: 60
+      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
+      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+      environment-variables: |-
+        CIBW_ARCHS_LINUX=armv7l
+        CIBW_BUILD_FRONTEND=build
+        CIBW_SKIP=*-musllinux_*
+
+
+  build-wheels-macos:
+    name: Build wheels on macOS
+    needs:
+    - build-sdist
+    - pre-setup
+    uses: ./.github/workflows/reusable-cibuildwheel.yml
+    with:
+      check-name: Build wheels on macOS
+      runner-vm-os: macos-latest
+      timeout-minutes: 30
+      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
+      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+      environment-variables: |-
+        CIBW_ARCHS_MACOS=x86_64 arm64 universal2
+
+
+  check-version:
+    name: Check PyPI version
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Check if version already exists on PyPI
+      run: python tools/check_pypi_version.py
+
+
+  publish:
+    name: Publish to PyPI
+    needs:
+    - check-version
+    - build-wheels-x86-64
+    - build-wheels-aarch64
+    - build-wheels-armv7l
+    - build-wheels-macos
+    - build-sdist
+    - pre-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      id-token: write
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ env.PROJECT_NAME }}
+
+    steps:
+    - name: Retrieve the project source from an sdist
+      uses: re-actors/checkout-python-sdist@release/v2
+      with:
+        source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
+        workflow-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
+
+    - name: Download wheels
+      uses: actions/download-artifact@v8
+      with:
+        pattern: ${{ needs.pre-setup.outputs.dists-artifact-name }}*
+        merge-multiple: true
+        path: dist
+
+    - name: List distributions
+      run: ls -la dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_TOKEN }}
+        skip-existing: true

@@ -1,0 +1,270 @@
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+new file mode 100644
+index 0000000..314de81
+--- /dev/null
++++ b/.github/workflows/release.yml
+@@ -0,0 +1,193 @@
++---
++
++name: Release
++
++on:
++  push:
++    tags:
++      - v*
++
++env:
++  FORCE_COLOR: "1"
++  PIP_DISABLE_PIP_VERSION_CHECK: "1"
++  PIP_NO_PYTHON_VERSION_WARNING: "1"
++  PROJECT_NAME: multidict
++  PYTHON_LATEST: 3.x
++
++
++jobs:
++
++  pre-setup:
++    name: Pre-setup
++    runs-on: ubuntu-latest
++    timeout-minutes: 1
++    defaults:
++      run:
++        shell: python
++    outputs:
++      dists-artifact-name: python-package-distributions
++      sdist-name: ${{ env.PROJECT_NAME }}-*.tar.gz
++      wheel-name: ${{ env.PROJECT_NAME }}-*.whl
++    steps:
++    - run: print('No-op')
++
++
++  build-sdist:
++    name: Build sdist
++    needs:
++    - pre-setup
++    runs-on: ubuntu-latest
++    timeout-minutes: 1
++    outputs:
++      sdist-filename: ${{ steps.dist-filenames.outputs.sdist-filename }}
++    steps:
++    - name: Checkout
++      uses: actions/checkout@v6
++    - name: Set up Python ${{ env.PYTHON_LATEST }}
++      uses: actions/setup-python@v6
++      with:
++        python-version: ${{ env.PYTHON_LATEST }}
++    - name: Install build
++      run: python -Im pip install build
++    - name: Build sdist
++      env:
++        MULTIDICT_NO_EXTENSIONS: Y
++      run: python -Im build
++    - name: Determine sdist filename
++      id: dist-filenames
++      run: |
++        echo -n "sdist-filename=" >> "${GITHUB_OUTPUT}"
++        basename "$(ls -1 dist/${{ needs.pre-setup.outputs.sdist-name }})" \
++          >> "${GITHUB_OUTPUT}"
++      shell: bash
++    - name: Upload sdist artifact
++      uses: actions/upload-artifact@v7
++      with:
++        if-no-files-found: error
++        name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++        path: dist/${{ steps.dist-filenames.outputs.sdist-filename }}
++        retention-days: 7
++
++
++  build-wheels-x86-64:
++    name: Build wheels on Linux x86_64
++    needs:
++    - build-sdist
++    - pre-setup
++    uses: ./.github/workflows/reusable-cibuildwheel.yml
++    with:
++      check-name: Build wheels on Linux x86_64
++      runner-vm-os: ubuntu-latest
++      timeout-minutes: 30
++      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
++      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++      environment-variables: |-
++        CIBW_ARCHS_LINUX=x86_64
++        CIBW_SKIP=*-musllinux_*
++
++
++  build-wheels-aarch64:
++    name: Build wheels on Linux aarch64
++    needs:
++    - build-sdist
++    - pre-setup
++    uses: ./.github/workflows/reusable-cibuildwheel.yml
++    with:
++      check-name: Build wheels on Linux aarch64
++      runner-vm-os: ubuntu-24.04-arm
++      timeout-minutes: 30
++      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
++      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++      environment-variables: |-
++        CIBW_ARCHS_LINUX=aarch64
++        CIBW_SKIP=*-musllinux_*
++
++
++  build-wheels-armv7l:
++    name: Build wheels on Linux armv7l
++    needs:
++    - build-sdist
++    - pre-setup
++    uses: ./.github/workflows/reusable-cibuildwheel.yml
++    with:
++      check-name: Build wheels on Linux armv7l
++      qemu: true
++      runner-vm-os: ubuntu-24.04-arm
++      timeout-minutes: 60
++      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
++      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++      environment-variables: |-
++        CIBW_ARCHS_LINUX=armv7l
++        CIBW_BUILD_FRONTEND=build
++        CIBW_SKIP=*-musllinux_*
++
++
++  build-wheels-macos:
++    name: Build wheels on macOS
++    needs:
++    - build-sdist
++    - pre-setup
++    uses: ./.github/workflows/reusable-cibuildwheel.yml
++    with:
++      check-name: Build wheels on macOS
++      runner-vm-os: macos-latest
++      timeout-minutes: 30
++      source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
++      dists-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++      environment-variables: |-
++        CIBW_ARCHS_MACOS=x86_64 arm64 universal2
++
++
++  check-version:
++    name: Check PyPI version
++    runs-on: ubuntu-latest
++    timeout-minutes: 2
++    steps:
++    - name: Checkout
++      uses: actions/checkout@v6
++    - name: Check if version already exists on PyPI
++      run: python tools/check_pypi_version.py
++
++
++  publish:
++    name: Publish to PyPI
++    needs:
++    - check-version
++    - build-wheels-x86-64
++    - build-wheels-aarch64
++    - build-wheels-armv7l
++    - build-wheels-macos
++    - build-sdist
++    - pre-setup
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++
++    permissions:
++      id-token: write
++
++    environment:
++      name: pypi
++      url: https://pypi.org/p/${{ env.PROJECT_NAME }}
++
++    steps:
++    - name: Retrieve the project source from an sdist
++      uses: re-actors/checkout-python-sdist@release/v2
++      with:
++        source-tarball-name: ${{ needs.build-sdist.outputs.sdist-filename }}
++        workflow-artifact-name: ${{ needs.pre-setup.outputs.dists-artifact-name }}
++
++    - name: Download wheels
++      uses: actions/download-artifact@v8
++      with:
++        pattern: ${{ needs.pre-setup.outputs.dists-artifact-name }}*
++        merge-multiple: true
++        path: dist
++
++    - name: List distributions
++      run: ls -la dist/
++
++    - name: Publish to PyPI
++      uses: pypa/gh-action-pypi-publish@release/v1
++      with:
++        password: ${{ secrets.PYPI_TOKEN }}
++        skip-existing: true
+\ No newline at end of file
+diff --git a/5.1.4.patch b/5.1.4.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tools/check_pypi_version.py b/tools/check_pypi_version.py
+new file mode 100644
+index 0000000..8a2da81
+--- /dev/null
++++ b/tools/check_pypi_version.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++
++import json
++import re
++import sys
++import urllib.error
++import urllib.request
++
++PACKAGE_NAME = "multidict"
++PYPI_JSON_URL = f"https://pypi.org/pypi/{PACKAGE_NAME}/json"
++VERSION_FILE = "multidict/__init__.py"
++
++RE_VERSION = re.compile(r'''__version__\s*=\s*["']([^"']+)["']''')
++
++
++def get_local_version() -> str:
++    with open(VERSION_FILE, encoding="utf-8") as fh:
++        for line in fh:
++            match = RE_VERSION.search(line)
++            if match:
++                return match.group(1)
++    raise SystemExit(
++        f"Could not find __version__ in {VERSION_FILE}"
++    )
++
++
++def check_pypi(version: str) -> bool:
++    req = urllib.request.Request(PYPI_JSON_URL)
++    try:
++        with urllib.request.urlopen(req, timeout=30) as resp:
++            data = json.load(resp)
++    except urllib.error.HTTPError as exc:
++        if exc.code == 404:
++            print(f"Package '{PACKAGE_NAME}' not found on PyPI. Proceeding.")
++            return False
++        raise SystemExit(f"HTTP {exc.code}: could not query PyPI") from exc
++    except urllib.error.URLError as exc:
++        raise SystemExit(f"Network error querying PyPI: {exc}") from exc
++
++    releases = data.get("releases", {})
++    if version in releases:
++        print(
++            f"Version {version} already exists on PyPI. "
++            "Skipping release."
++        )
++        return True
++    print(f"Version {version} does not exist on PyPI. Proceeding.")
++    return False
++
++
++def main() -> None:
++    version = get_local_version()
++    exists = check_pypi(version)
++    if exists:
++        sys.exit(1)
++    sys.exit(0)
++
++
++if __name__ == "__main__":
++    main()
+\ No newline at end of file
