@@ -1,0 +1,83 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..24976ee 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -607,6 +607,26 @@ class _HtKeys(Generic[_V]):  # type: ignore[misc]
+             i = (i * 5 + perturb + 1) & mask
+             ix = indices[i]
+ 
++    def getall(self, identity: str) -> list[_V]:
++        """Return a list of all values matching the identity."""
++        res = []
++        hash_ = hash(identity)
++        mask = self.mask
++        indices = self.indices
++        entries = self.entries
++        i = hash_ & mask
++        perturb = hash_ & sys.maxsize
++        ix = indices[i]
++        while ix != -1:
++            if ix != -2:
++                entry = entries[ix]
++                if entry.identity == identity:
++                    res.append(entry.value)
++            perturb >>= 5
++            i = (i * 5 + perturb + 1) & mask
++            ix = indices[i]
++        return res
++
+ 
+ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+     """Dictionary with the support for duplicate keys."""
+@@ -1172,8 +1192,10 @@ class MultiDictProxy(_CSMixin, MultiMapping[_V]):
+ 
+     @overload
+     def get(self, key: str, /) -> _V | None: ...
++
+     @overload
+     def get(self, key: str, /, default: _T) -> _V | _T: ...
++
+     def get(self, key: str, default: _T | None = None) -> _V | _T | None:
+         """Get first value matching the key.
+ 
+@@ -1181,6 +1203,23 @@ class MultiDictProxy(_CSMixin, MultiMapping[_V]):
+         """
+         return self._md.getone(key, default)
+ 
++    @overload
++    def getall(self, key: str) -> list[_V]: ...
++
++    @overload
++    def getall(self, key: str, default: _T) -> list[_V] | _T: ...
++
++    def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
++        """Return a list of all values matching the key.
++        
++        If key is not found and default is provided, returns default.
++        If key is not found and default is not provided, returns empty list.
++        """
++        return self._md.getall(key, default)
++
++
++
++
+     def __iter__(self) -> Iterator[str]:
+         return iter(self._md.keys())
+ 
+@@ -1199,6 +1238,16 @@ class MultiDictProxy(_CSMixin, MultiMapping[_V]):
+         """Return a new view of the dictionary's values."""
+         return self._md.values()
+ 
++    @overload
++    def getall(self, key: str) -> list[_V]: ...
++
++    @overload
++    def getall(self, key: str, default: _T) -> list[_V] | _T: ...
++
++    def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
++        """Return a list of all values matching the key."""
++        return self._md.getall(key, default)
++
+     def __eq__(self, other: object) -> bool:
+         return self._md == other
+ 
