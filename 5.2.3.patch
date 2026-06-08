@@ -1,0 +1,37 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..a3a3f28 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -990,6 +990,13 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+ 
+     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+         """Update the dictionary, overwriting existing keys."""
++        if arg is not None and not isinstance(arg, (MultiDict, MultiDictProxy)) and hasattr(arg, "keys") and kwargs:
++            arg = cast(SupportsKeys[_V], arg)
++            arg_dict = {k: arg[k] for k in arg.keys()}
++            arg_dict.update(kwargs)
++            arg = arg_dict
++            kwargs = {}  # type: ignore[assignment]
++
+         it = self._parse_args(arg, kwargs)
+         newsize = self._used + cast(int, next(it))
+         log2_size = estimate_log2_keysize(newsize)
+diff --git a/tests/test_update.py b/tests/test_update.py
+index a552bd8..317dda2 100644
+--- a/tests/test_update.py
++++ b/tests/test_update.py
+@@ -170,6 +170,14 @@ def test_pure_python_parse_args_size_hint_with_seq_and_kwargs() -> None:
+     assert size_hint == len(entries) == len(arg) + len(kwargs)
+ 
+ 
++def test_update_kwargs_double_count() -> None:
++    """When both arg and kwargs are provided, kwargs should overwrite arg."""
++    md: PyMultiDict[int] = PyMultiDict()
++    md.update({"a": 1}, a=2)
++    assert list(md.items()) == [("a", 2)]
++    assert len(md) == 1
++
++
+ def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
+     """Same regression but exercising the mapping (``keys()``) branch."""
+     md: PyMultiDict[int] = PyMultiDict()

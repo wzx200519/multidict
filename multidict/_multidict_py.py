@@ -990,6 +990,13 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Update the dictionary, overwriting existing keys."""
+        if arg is not None and not isinstance(arg, (MultiDict, MultiDictProxy)) and hasattr(arg, "keys") and kwargs:
+            arg = cast(SupportsKeys[_V], arg)
+            arg_dict = {k: arg[k] for k in arg.keys()}
+            arg_dict.update(kwargs)
+            arg = arg_dict
+            kwargs = {}  # type: ignore[assignment]
+
         it = self._parse_args(arg, kwargs)
         newsize = self._used + cast(int, next(it))
         log2_size = estimate_log2_keysize(newsize)

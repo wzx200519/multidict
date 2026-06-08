@@ -170,6 +170,14 @@ def test_pure_python_parse_args_size_hint_with_seq_and_kwargs() -> None:
     assert size_hint == len(entries) == len(arg) + len(kwargs)
 
 
+def test_update_kwargs_double_count() -> None:
+    """When both arg and kwargs are provided, kwargs should overwrite arg."""
+    md: PyMultiDict[int] = PyMultiDict()
+    md.update({"a": 1}, a=2)
+    assert list(md.items()) == [("a", 2)]
+    assert len(md) == 1
+
+
 def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
     """Same regression but exercising the mapping (``keys()``) branch."""
     md: PyMultiDict[int] = PyMultiDict()
