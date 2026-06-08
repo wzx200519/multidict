@@ -990,6 +990,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Update the dictionary, overwriting existing keys."""
+        if arg is not None:
+            self._update_from(arg, {})
+        if kwargs:
+            self._update_from(None, kwargs)
+
+    def _update_from(self, arg: MDArg[_V] | None, kwargs: Mapping[str, _V]) -> None:
         it = self._parse_args(arg, kwargs)
         newsize = self._used + cast(int, next(it))
         log2_size = estimate_log2_keysize(newsize)
@@ -1041,6 +1047,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
 
     def merge(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
         """Merge into the dictionary, adding non-existing keys."""
+        if arg is not None:
+            self._merge_from(arg, {})
+        if kwargs:
+            self._merge_from(None, kwargs)
+
+    def _merge_from(self, arg: MDArg[_V] | None, kwargs: Mapping[str, _V]) -> None:
         it = self._parse_args(arg, kwargs)
         newsize = self._used + cast(int, next(it))
         log2_size = estimate_log2_keysize(newsize)

@@ -170,6 +170,14 @@ def test_pure_python_parse_args_size_hint_with_seq_and_kwargs() -> None:
     assert size_hint == len(entries) == len(arg) + len(kwargs)
 
 
+def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
+    obj = any_multidict_class([("a", 1), ("b", 2)])
+    obj.update({"a": 10, "b": 20}, a=100, c=30)
+    expected = [("a", 100), ("b", 20), ("c", 30)]
+    assert list(obj.items()) == expected
+    assert len(obj) == 3
+
+
 def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
     """Same regression but exercising the mapping (``keys()``) branch."""
     md: PyMultiDict[int] = PyMultiDict()

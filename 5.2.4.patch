@@ -1,0 +1,49 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..66b1cf5 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -990,6 +990,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+ 
+     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+         """Update the dictionary, overwriting existing keys."""
++        if arg is not None:
++            self._update_from(arg, {})
++        if kwargs:
++            self._update_from(None, kwargs)
++
++    def _update_from(self, arg: MDArg[_V] | None, kwargs: Mapping[str, _V]) -> None:
+         it = self._parse_args(arg, kwargs)
+         newsize = self._used + cast(int, next(it))
+         log2_size = estimate_log2_keysize(newsize)
+@@ -1041,6 +1047,12 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+ 
+     def merge(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+         """Merge into the dictionary, adding non-existing keys."""
++        if arg is not None:
++            self._merge_from(arg, {})
++        if kwargs:
++            self._merge_from(None, kwargs)
++
++    def _merge_from(self, arg: MDArg[_V] | None, kwargs: Mapping[str, _V]) -> None:
+         it = self._parse_args(arg, kwargs)
+         newsize = self._used + cast(int, next(it))
+         log2_size = estimate_log2_keysize(newsize)
+diff --git a/tests/test_update.py b/tests/test_update.py
+index a552bd8..4715424 100644
+--- a/tests/test_update.py
++++ b/tests/test_update.py
+@@ -170,6 +170,14 @@ def test_pure_python_parse_args_size_hint_with_seq_and_kwargs() -> None:
+     assert size_hint == len(entries) == len(arg) + len(kwargs)
+ 
+ 
++def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
++    obj = any_multidict_class([("a", 1), ("b", 2)])
++    obj.update({"a": 10, "b": 20}, a=100, c=30)
++    expected = [("a", 100), ("b", 20), ("c", 30)]
++    assert list(obj.items()) == expected
++    assert len(obj) == 3
++
++
+ def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
+     """Same regression but exercising the mapping (``keys()``) branch."""
+     md: PyMultiDict[int] = PyMultiDict()
