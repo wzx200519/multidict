@@ -1005,7 +1005,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             self._post_update()
 
     def _update_items(self, items: Iterator[_Entry[_V]]) -> None:
+        seen = set()
         for entry in items:
+            if entry.identity in seen:
+                continue
+            seen.add(entry.identity)
             found = False
             hash_ = entry.hash
             identity = entry.identity
@@ -1056,7 +1060,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             self._post_update()
 
     def _merge_items(self, items: Iterator[_Entry[_V]]) -> None:
+        seen = set()
         for entry in items:
+            if entry.identity in seen:
+                continue
+            seen.add(entry.identity)
             hash_ = entry.hash
             identity = entry.identity
             for slot, idx, e in self._keys.iter_hash(hash_):

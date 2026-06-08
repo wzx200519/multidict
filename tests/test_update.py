@@ -121,6 +121,14 @@ def test_update_deque_arg_and_kwds(any_multidict_class: _MD_Classes) -> None:
     assert arg == deque([("a", 1)])
 
 
+def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
+    obj1 = any_multidict_class([("a", 1), ("b", 2)])
+    obj2 = any_multidict_class([("a", 4), ("b", 5), ("a", 6)])
+    obj1.update(obj2, a=3)
+    expected = [("a", 4), ("b", 5), ("a", 6), ("a", 3)]
+    assert list(obj1.items()) == expected
+
+
 def test_update_with_second_md(any_multidict_class: _MD_Classes) -> None:
     obj1 = any_multidict_class()
     obj2 = any_multidict_class([("a", 2)])

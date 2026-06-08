@@ -1,0 +1,47 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..94c22fb 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -1005,7 +1005,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+             self._post_update()
+ 
+     def _update_items(self, items: Iterator[_Entry[_V]]) -> None:
++        seen = set()
+         for entry in items:
++            if entry.identity in seen:
++                continue
++            seen.add(entry.identity)
+             found = False
+             hash_ = entry.hash
+             identity = entry.identity
+@@ -1056,7 +1060,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+             self._post_update()
+ 
+     def _merge_items(self, items: Iterator[_Entry[_V]]) -> None:
++        seen = set()
+         for entry in items:
++            if entry.identity in seen:
++                continue
++            seen.add(entry.identity)
+             hash_ = entry.hash
+             identity = entry.identity
+             for slot, idx, e in self._keys.iter_hash(hash_):
+diff --git a/tests/test_update.py b/tests/test_update.py
+index a552bd8..0d0212d 100644
+--- a/tests/test_update.py
++++ b/tests/test_update.py
+@@ -121,6 +121,14 @@ def test_update_deque_arg_and_kwds(any_multidict_class: _MD_Classes) -> None:
+     assert arg == deque([("a", 1)])
+ 
+ 
++def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
++    obj1 = any_multidict_class([("a", 1), ("b", 2)])
++    obj2 = any_multidict_class([("a", 4), ("b", 5), ("a", 6)])
++    obj1.update(obj2, a=3)
++    expected = [("a", 4), ("b", 5), ("a", 6), ("a", 3)]
++    assert list(obj1.items()) == expected
++
++
+ def test_update_with_second_md(any_multidict_class: _MD_Classes) -> None:
+     obj1 = any_multidict_class()
+     obj2 = any_multidict_class([("a", 2)])
