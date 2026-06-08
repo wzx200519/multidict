@@ -1,0 +1,45 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..59c5286 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -1018,6 +1018,13 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+                         e.hash = -1
+                     else:
+                         self._del_at_for_upd(e)
++            if not found:
++                for slot, idx, e in self._keys.iter_hash(-1):
++                    if e.identity == identity:  # pragma: no branch
++                        found = True
++                        e.key = entry.key
++                        e.value = entry.value
++                        break
+             if not found:
+                 self._add_with_hash_for_upd(entry)
+ 
+diff --git a/tests/test_update.py b/tests/test_update.py
+index a552bd8..36e8389 100644
+--- a/tests/test_update.py
++++ b/tests/test_update.py
+@@ -185,8 +185,7 @@ def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
+ 
+ def test_pure_python_parse_args_size_hint_with_md_and_kwargs() -> None:
+     """``MultiDict`` positional argument already yields the correct hint."""
+-    md: PyMultiDict[int] = PyMultiDict()
+-    arg = PyMultiDict([("a", 1), ("a", 2), ("b", 3)])
++    md: PyMultiDict[int] = PyMultiDict([("a", 1), ("a", 2), ("b", 3)])
+     kwargs = {"c": 4}
+ 
+     it = md._parse_args(arg, kwargs)
+@@ -194,3 +193,12 @@ def test_pure_python_parse_args_size_hint_with_md_and_kwargs() -> None:
+     entries = list(it)
+ 
+     assert size_hint == len(entries) == len(arg) + len(kwargs)
++
++
++def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
++    """Test that keys appearing in both dict arg and kwargs are counted only once."""
++    obj = any_multidict_class([("a", 1), ("b", 2)])
++    obj.update({"a": 3}, a=4)
++    # 'a' should appear only once with value 4 (from kwargs), not twice
++    assert list(obj.items()) == [("a", 4), ("b", 2)]
++    assert len(obj) == 2

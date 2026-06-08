@@ -1019,6 +1019,13 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                     else:
                         self._del_at_for_upd(e)
             if not found:
+                for slot, idx, e in self._keys.iter_hash(-1):
+                    if e.identity == identity:  # pragma: no branch
+                        found = True
+                        e.key = entry.key
+                        e.value = entry.value
+                        break
+            if not found:
                 self._add_with_hash_for_upd(entry)
 
     def _post_update(self) -> None:
