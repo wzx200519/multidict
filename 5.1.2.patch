@@ -1,245 +1,353 @@
 diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
-new file mode 100644
-index 0000000..50ea519
---- /dev/null
+index 50ea519..db5f1a7 100644
+--- a/.github/workflows/release.yml
 +++ b/.github/workflows/release.yml
-@@ -0,0 +1,131 @@
-+---
-+
-+name: Release Wheels
-+
-+on:
-+  push:
-+    tags:
-+    - v*
-+
-+permissions:
-+  contents: read
-+
-+env:
-+  FORCE_COLOR: "1"
-+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-+  PIP_NO_PYTHON_VERSION_WARNING: "1"
-+
-+jobs:
-+  check-version:
-+    name: Check PyPI version
-+    runs-on: ubuntu-latest
-+    outputs:
-+      package-name: ${{ steps.version-check.outputs.package_name }}
-+      package-version: ${{ steps.version-check.outputs.package_version }}
-+      version-exists: ${{ steps.version-check.outputs.pypi_version_exists }}
-+    steps:
-+    - name: Checkout
-+      uses: actions/checkout@v6
-+    - name: Set up Python
-+      uses: actions/setup-python@v6
-+      with:
-+        python-version: "3.14"
-+    - name: Check whether the version already exists on PyPI
-+      id: version-check
-+      run: >-
-+        python tools/check_pypi_version.py
-+        --github-output "${GITHUB_OUTPUT}"
-+    - name: Mark release as skipped when the version is already published
-+      if: steps.version-check.outputs.pypi_version_exists == 'true'
-+      run: >-
-+        echo "${{ steps.version-check.outputs.package_name }}
-+        ${{ steps.version-check.outputs.package_version }} is already on PyPI;
-+        skipping wheel builds and upload." >> "${GITHUB_STEP_SUMMARY}"
-+
-+  build-wheels:
-+    name: Build ${{ matrix.display-name }} wheels
-+    needs:
-+    - check-version
-+    if: needs.check-version.outputs.version-exists != 'true'
-+    runs-on: ${{ matrix.runner }}
-+    strategy:
-+      fail-fast: false
-+      matrix:
-+        include:
-+        - display-name: linux-x86_64
-+          runner: ubuntu-latest
-+          platform: linux
-+          arch: x86_64
-+          artifact-name: wheels-linux-x86_64
-+          qemu: false
-+        - display-name: linux-aarch64
-+          runner: ubuntu-latest
-+          platform: linux
-+          arch: aarch64
-+          artifact-name: wheels-linux-aarch64
-+          qemu: true
-+        - display-name: linux-armv7l
-+          runner: ubuntu-latest
-+          platform: linux
-+          arch: armv7l
-+          artifact-name: wheels-linux-armv7l
-+          qemu: true
-+        - display-name: macos
-+          runner: macos-latest
-+          platform: macos
-+          arch: x86_64 arm64
-+          artifact-name: wheels-macos
-+          qemu: false
-+    steps:
-+    - name: Checkout
-+      uses: actions/checkout@v6
-+    - name: Set up QEMU
-+      if: matrix.qemu
-+      uses: docker/setup-qemu-action@v4
-+      with:
-+        platforms: all
-+    - name: Build wheels
-+      uses: pypa/cibuildwheel@v3.4.1
-+      env:
-+        CIBW_ARCHS_LINUX: ${{ matrix.platform == 'linux' && matrix.arch || '' }}
-+        CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos' && matrix.arch || '' }}
-+        CIBW_BEFORE_ALL_LINUX: >-
-+          python -m pip install --upgrade uv &&
-+          (yum install -y libffi-devel ||
-+          apk add --upgrade libffi-dev ||
-+          (apt-get update && apt-get install -y libffi-dev))
-+      with:
-+        extras: uv
-+        package-dir: .
-+    - name: Upload built wheels
-+      uses: actions/upload-artifact@v7
-+      with:
-+        if-no-files-found: error
-+        name: ${{ matrix.artifact-name }}
-+        path: wheelhouse/*.whl
-+
-+  publish:
-+    name: Publish wheels to PyPI
-+    needs:
-+    - check-version
-+    - build-wheels
-+    if: needs.check-version.outputs.version-exists != 'true'
-+    runs-on: ubuntu-latest
-+    environment:
-+      name: pypi
-+      url: >-
-+        https://pypi.org/project/${{ needs.check-version.outputs.package-name }}/
-+    steps:
-+    - name: Download wheel artifacts
-+      uses: actions/download-artifact@v8
-+      with:
-+        pattern: wheels-*
-+        merge-multiple: true
-+        path: dist
-+    - name: Set up uv
-+      uses: astral-sh/setup-uv@v6
-+    - name: Publish wheels
-+      env:
-+        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-+      run: >-
-+        uv publish --token "${UV_PUBLISH_TOKEN}" dist/*.whl
+@@ -19,6 +19,7 @@ jobs:
+   check-version:
+     name: Check PyPI version
+     runs-on: ubuntu-latest
++    timeout-minutes: 5
+     outputs:
+       package-name: ${{ steps.version-check.outputs.package_name }}
+       package-version: ${{ steps.version-check.outputs.package_version }}
+@@ -30,10 +31,11 @@ jobs:
+       uses: actions/setup-python@v6
+       with:
+         python-version: "3.14"
+-    - name: Check whether the version already exists on PyPI
++    - name: Check tag and PyPI version
+       id: version-check
+       run: >-
+         python tools/check_pypi_version.py
++        --tag "${GITHUB_REF_NAME}"
+         --github-output "${GITHUB_OUTPUT}"
+     - name: Mark release as skipped when the version is already published
+       if: steps.version-check.outputs.pypi_version_exists == 'true'
+@@ -48,6 +50,7 @@ jobs:
+     - check-version
+     if: needs.check-version.outputs.version-exists != 'true'
+     runs-on: ${{ matrix.runner }}
++    timeout-minutes: 45
+     strategy:
+       fail-fast: false
+       matrix:
+@@ -89,6 +92,7 @@ jobs:
+       env:
+         CIBW_ARCHS_LINUX: ${{ matrix.platform == 'linux' && matrix.arch || '' }}
+         CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos' && matrix.arch || '' }}
++        CIBW_BUILD_FRONTEND: build[uv]
+         CIBW_BEFORE_ALL_LINUX: >-
+           python -m pip install --upgrade uv &&
+           (yum install -y libffi-devel ||
+@@ -111,6 +115,7 @@ jobs:
+     - build-wheels
+     if: needs.check-version.outputs.version-exists != 'true'
+     runs-on: ubuntu-latest
++    timeout-minutes: 10
+     environment:
+       name: pypi
+       url: >-
 diff --git a/5.1.2.patch b/5.1.2.patch
-new file mode 100644
-index 0000000..e69de29
+index 5d97844..e69de29 100644
+--- a/5.1.2.patch
++++ b/5.1.2.patch
+@@ -1,245 +0,0 @@
+-diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+-new file mode 100644
+-index 0000000..50ea519
+---- /dev/null
+-+++ b/.github/workflows/release.yml
+-@@ -0,0 +1,131 @@
+-+---
+-+
+-+name: Release Wheels
+-+
+-+on:
+-+  push:
+-+    tags:
+-+    - v*
+-+
+-+permissions:
+-+  contents: read
+-+
+-+env:
+-+  FORCE_COLOR: "1"
+-+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+-+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+-+
+-+jobs:
+-+  check-version:
+-+    name: Check PyPI version
+-+    runs-on: ubuntu-latest
+-+    outputs:
+-+      package-name: ${{ steps.version-check.outputs.package_name }}
+-+      package-version: ${{ steps.version-check.outputs.package_version }}
+-+      version-exists: ${{ steps.version-check.outputs.pypi_version_exists }}
+-+    steps:
+-+    - name: Checkout
+-+      uses: actions/checkout@v6
+-+    - name: Set up Python
+-+      uses: actions/setup-python@v6
+-+      with:
+-+        python-version: "3.14"
+-+    - name: Check whether the version already exists on PyPI
+-+      id: version-check
+-+      run: >-
+-+        python tools/check_pypi_version.py
+-+        --github-output "${GITHUB_OUTPUT}"
+-+    - name: Mark release as skipped when the version is already published
+-+      if: steps.version-check.outputs.pypi_version_exists == 'true'
+-+      run: >-
+-+        echo "${{ steps.version-check.outputs.package_name }}
+-+        ${{ steps.version-check.outputs.package_version }} is already on PyPI;
+-+        skipping wheel builds and upload." >> "${GITHUB_STEP_SUMMARY}"
+-+
+-+  build-wheels:
+-+    name: Build ${{ matrix.display-name }} wheels
+-+    needs:
+-+    - check-version
+-+    if: needs.check-version.outputs.version-exists != 'true'
+-+    runs-on: ${{ matrix.runner }}
+-+    strategy:
+-+      fail-fast: false
+-+      matrix:
+-+        include:
+-+        - display-name: linux-x86_64
+-+          runner: ubuntu-latest
+-+          platform: linux
+-+          arch: x86_64
+-+          artifact-name: wheels-linux-x86_64
+-+          qemu: false
+-+        - display-name: linux-aarch64
+-+          runner: ubuntu-latest
+-+          platform: linux
+-+          arch: aarch64
+-+          artifact-name: wheels-linux-aarch64
+-+          qemu: true
+-+        - display-name: linux-armv7l
+-+          runner: ubuntu-latest
+-+          platform: linux
+-+          arch: armv7l
+-+          artifact-name: wheels-linux-armv7l
+-+          qemu: true
+-+        - display-name: macos
+-+          runner: macos-latest
+-+          platform: macos
+-+          arch: x86_64 arm64
+-+          artifact-name: wheels-macos
+-+          qemu: false
+-+    steps:
+-+    - name: Checkout
+-+      uses: actions/checkout@v6
+-+    - name: Set up QEMU
+-+      if: matrix.qemu
+-+      uses: docker/setup-qemu-action@v4
+-+      with:
+-+        platforms: all
+-+    - name: Build wheels
+-+      uses: pypa/cibuildwheel@v3.4.1
+-+      env:
+-+        CIBW_ARCHS_LINUX: ${{ matrix.platform == 'linux' && matrix.arch || '' }}
+-+        CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos' && matrix.arch || '' }}
+-+        CIBW_BEFORE_ALL_LINUX: >-
+-+          python -m pip install --upgrade uv &&
+-+          (yum install -y libffi-devel ||
+-+          apk add --upgrade libffi-dev ||
+-+          (apt-get update && apt-get install -y libffi-dev))
+-+      with:
+-+        extras: uv
+-+        package-dir: .
+-+    - name: Upload built wheels
+-+      uses: actions/upload-artifact@v7
+-+      with:
+-+        if-no-files-found: error
+-+        name: ${{ matrix.artifact-name }}
+-+        path: wheelhouse/*.whl
+-+
+-+  publish:
+-+    name: Publish wheels to PyPI
+-+    needs:
+-+    - check-version
+-+    - build-wheels
+-+    if: needs.check-version.outputs.version-exists != 'true'
+-+    runs-on: ubuntu-latest
+-+    environment:
+-+      name: pypi
+-+      url: >-
+-+        https://pypi.org/project/${{ needs.check-version.outputs.package-name }}/
+-+    steps:
+-+    - name: Download wheel artifacts
+-+      uses: actions/download-artifact@v8
+-+      with:
+-+        pattern: wheels-*
+-+        merge-multiple: true
+-+        path: dist
+-+    - name: Set up uv
+-+      uses: astral-sh/setup-uv@v6
+-+    - name: Publish wheels
+-+      env:
+-+        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+-+      run: >-
+-+        uv publish --token "${UV_PUBLISH_TOKEN}" dist/*.whl
+-diff --git a/5.1.2.patch b/5.1.2.patch
+-new file mode 100644
+-index 0000000..e69de29
+-diff --git a/tools/check_pypi_version.py b/tools/check_pypi_version.py
+-new file mode 100644
+-index 0000000..5397297
+---- /dev/null
+-+++ b/tools/check_pypi_version.py
+-@@ -0,0 +1,99 @@
+-+#!/usr/bin/env python3
+-+import argparse
+-+import ast
+-+import configparser
+-+import urllib.error
+-+import urllib.request
+-+from pathlib import Path
+-+
+-+
+-+def get_package_metadata(project_root: Path) -> tuple[str, str]:
+-+    setup_cfg = project_root / "setup.cfg"
+-+    parser = configparser.ConfigParser()
+-+    parser.read(setup_cfg, encoding="utf-8")
+-+
+-+    name = parser["metadata"]["name"].strip()
+-+    version_value = parser["metadata"]["version"].strip()
+-+    if version_value.startswith("attr:"):
+-+        version = read_attr_value(
+-+            project_root,
+-+            version_value.removeprefix("attr:").strip(),
+-+        )
+-+    else:
+-+        version = version_value
+-+    return name, version
+-+
+-+
+-+def read_attr_value(project_root: Path, dotted_path: str) -> str:
+-+    module_name, attribute_name = dotted_path.rsplit(".", 1)
+-+    module_path = project_root.joinpath(*module_name.split("."))
+-+    if module_path.is_dir():
+-+        module_path = module_path / "__init__.py"
+-+    else:
+-+        module_path = module_path.with_suffix(".py")
+-+
+-+    module_ast = ast.parse(module_path.read_text(encoding="utf-8"))
+-+    for node in module_ast.body:
+-+        if not isinstance(node, ast.Assign):
+-+            continue
+-+        for target in node.targets:
+-+            if isinstance(target, ast.Name) and target.id == attribute_name:
+-+                value = ast.literal_eval(node.value)
+-+                if not isinstance(value, str):
+-+                    raise ValueError(
+-+                        f"{attribute_name} in {module_path} must be a string",
+-+                    )
+-+                return value
+-+
+-+    raise ValueError(f"Unable to find {attribute_name} in {module_path}")
+-+
+-+
+-+def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
+-+    url = f"https://pypi.org/pypi/{package_name}/{package_version}/json"
+-+    request = urllib.request.Request(
+-+        url,
+-+        headers={"User-Agent": "multidict-release-check"},
+-+    )
+-+    try:
+-+        with urllib.request.urlopen(request) as response:
+-+            return response.status == 200
+-+    except urllib.error.HTTPError as exc:
+-+        if exc.code == 404:
+-+            return False
+-+        raise
+-+
+-+
+-+def write_outputs(output_path: Path, outputs: dict[str, str]) -> None:
+-+    with output_path.open("a", encoding="utf-8") as output_file:
+-+        for key, value in outputs.items():
+-+            print(f"{key}={value}", file=output_file)
+-+
+-+
+-+def main() -> int:
+-+    parser = argparse.ArgumentParser()
+-+    parser.add_argument(
+-+        "--project-root",
+-+        default=Path(__file__).resolve().parents[1],
+-+        type=Path,
+-+    )
+-+    parser.add_argument("--github-output", type=Path)
+-+    args = parser.parse_args()
+-+
+-+    package_name, package_version = get_package_metadata(args.project_root)
+-+    exists = version_exists_on_pypi(package_name, package_version)
+-+
+-+    outputs = {
+-+        "package_name": package_name,
+-+        "package_version": package_version,
+-+        "pypi_version_exists": str(exists).lower(),
+-+    }
+-+
+-+    if args.github_output is not None:
+-+        write_outputs(args.github_output, outputs)
+-+
+-+    print(f"{package_name} {package_version} exists_on_pypi={str(exists).lower()}")
+-+    return 0
+-+
+-+
+-+if __name__ == "__main__":
+-+    raise SystemExit(main())
 diff --git a/tools/check_pypi_version.py b/tools/check_pypi_version.py
-new file mode 100644
-index 0000000..5397297
---- /dev/null
+index 5397297..d8dfc29 100644
+--- a/tools/check_pypi_version.py
 +++ b/tools/check_pypi_version.py
-@@ -0,0 +1,99 @@
-+#!/usr/bin/env python3
-+import argparse
-+import ast
-+import configparser
-+import urllib.error
-+import urllib.request
-+from pathlib import Path
+@@ -48,6 +48,24 @@ def read_attr_value(project_root: Path, dotted_path: str) -> str:
+     raise ValueError(f"Unable to find {attribute_name} in {module_path}")
+ 
+ 
++def get_tag_version(tag: str) -> str:
++    if not tag.startswith("v"):
++        raise ValueError(f"Release tag must start with 'v', got {tag!r}")
++    tag_version = tag.removeprefix("v")
++    if not tag_version:
++        raise ValueError("Release tag must include a version after 'v'")
++    return tag_version
 +
 +
-+def get_package_metadata(project_root: Path) -> tuple[str, str]:
-+    setup_cfg = project_root / "setup.cfg"
-+    parser = configparser.ConfigParser()
-+    parser.read(setup_cfg, encoding="utf-8")
-+
-+    name = parser["metadata"]["name"].strip()
-+    version_value = parser["metadata"]["version"].strip()
-+    if version_value.startswith("attr:"):
-+        version = read_attr_value(
-+            project_root,
-+            version_value.removeprefix("attr:").strip(),
++def ensure_tag_matches_version(tag: str, package_version: str) -> None:
++    tag_version = get_tag_version(tag)
++    if tag_version != package_version:
++        raise ValueError(
++            f"Release tag version {tag_version!r} does not match package version "
++            f"{package_version!r}",
 +        )
-+    else:
-+        version = version_value
-+    return name, version
 +
 +
-+def read_attr_value(project_root: Path, dotted_path: str) -> str:
-+    module_name, attribute_name = dotted_path.rsplit(".", 1)
-+    module_path = project_root.joinpath(*module_name.split("."))
-+    if module_path.is_dir():
-+        module_path = module_path / "__init__.py"
-+    else:
-+        module_path = module_path.with_suffix(".py")
-+
-+    module_ast = ast.parse(module_path.read_text(encoding="utf-8"))
-+    for node in module_ast.body:
-+        if not isinstance(node, ast.Assign):
-+            continue
-+        for target in node.targets:
-+            if isinstance(target, ast.Name) and target.id == attribute_name:
-+                value = ast.literal_eval(node.value)
-+                if not isinstance(value, str):
-+                    raise ValueError(
-+                        f"{attribute_name} in {module_path} must be a string",
-+                    )
-+                return value
-+
-+    raise ValueError(f"Unable to find {attribute_name} in {module_path}")
-+
-+
-+def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
-+    url = f"https://pypi.org/pypi/{package_name}/{package_version}/json"
-+    request = urllib.request.Request(
-+        url,
-+        headers={"User-Agent": "multidict-release-check"},
-+    )
-+    try:
-+        with urllib.request.urlopen(request) as response:
-+            return response.status == 200
-+    except urllib.error.HTTPError as exc:
-+        if exc.code == 404:
-+            return False
-+        raise
-+
-+
-+def write_outputs(output_path: Path, outputs: dict[str, str]) -> None:
-+    with output_path.open("a", encoding="utf-8") as output_file:
-+        for key, value in outputs.items():
-+            print(f"{key}={value}", file=output_file)
-+
-+
-+def main() -> int:
-+    parser = argparse.ArgumentParser()
-+    parser.add_argument(
-+        "--project-root",
-+        default=Path(__file__).resolve().parents[1],
-+        type=Path,
-+    )
-+    parser.add_argument("--github-output", type=Path)
-+    args = parser.parse_args()
-+
-+    package_name, package_version = get_package_metadata(args.project_root)
+ def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
+     url = f"https://pypi.org/pypi/{package_name}/{package_version}/json"
+     request = urllib.request.Request(
+@@ -55,7 +73,7 @@ def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
+         headers={"User-Agent": "multidict-release-check"},
+     )
+     try:
+-        with urllib.request.urlopen(request) as response:
++        with urllib.request.urlopen(request, timeout=10) as response:
+             return response.status == 200
+     except urllib.error.HTTPError as exc:
+         if exc.code == 404:
+@@ -77,11 +95,14 @@ def main() -> int:
+         type=Path,
+     )
+     parser.add_argument("--github-output", type=Path)
++    parser.add_argument("--tag")
+     args = parser.parse_args()
+ 
+     package_name, package_version = get_package_metadata(args.project_root)
+-    exists = version_exists_on_pypi(package_name, package_version)
++    if args.tag is not None:
++        ensure_tag_matches_version(args.tag, package_version)
+ 
 +    exists = version_exists_on_pypi(package_name, package_version)
-+
-+    outputs = {
-+        "package_name": package_name,
-+        "package_version": package_version,
-+        "pypi_version_exists": str(exists).lower(),
-+    }
-+
-+    if args.github_output is not None:
-+        write_outputs(args.github_output, outputs)
-+
-+    print(f"{package_name} {package_version} exists_on_pypi={str(exists).lower()}")
-+    return 0
-+
-+
-+if __name__ == "__main__":
-+    raise SystemExit(main())
+     outputs = {
+         "package_name": package_name,
+         "package_version": package_version,

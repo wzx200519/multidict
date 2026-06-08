@@ -19,6 +19,7 @@ jobs:
   check-version:
     name: Check PyPI version
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       package-name: ${{ steps.version-check.outputs.package_name }}
       package-version: ${{ steps.version-check.outputs.package_version }}
@@ -30,10 +31,11 @@ jobs:
       uses: actions/setup-python@v6
       with:
         python-version: "3.14"
-    - name: Check whether the version already exists on PyPI
+    - name: Check tag and PyPI version
       id: version-check
       run: >-
         python tools/check_pypi_version.py
+        --tag "${GITHUB_REF_NAME}"
         --github-output "${GITHUB_OUTPUT}"
     - name: Mark release as skipped when the version is already published
       if: steps.version-check.outputs.pypi_version_exists == 'true'
@@ -48,6 +50,7 @@ jobs:
     - check-version
     if: needs.check-version.outputs.version-exists != 'true'
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -89,6 +92,7 @@ jobs:
       env:
         CIBW_ARCHS_LINUX: ${{ matrix.platform == 'linux' && matrix.arch || '' }}
         CIBW_ARCHS_MACOS: ${{ matrix.platform == 'macos' && matrix.arch || '' }}
+        CIBW_BUILD_FRONTEND: build[uv]
         CIBW_BEFORE_ALL_LINUX: >-
           python -m pip install --upgrade uv &&
           (yum install -y libffi-devel ||
@@ -111,6 +115,7 @@ jobs:
     - build-wheels
     if: needs.check-version.outputs.version-exists != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: pypi
       url: >-

@@ -48,6 +48,24 @@ def read_attr_value(project_root: Path, dotted_path: str) -> str:
     raise ValueError(f"Unable to find {attribute_name} in {module_path}")
 
 
+def get_tag_version(tag: str) -> str:
+    if not tag.startswith("v"):
+        raise ValueError(f"Release tag must start with 'v', got {tag!r}")
+    tag_version = tag.removeprefix("v")
+    if not tag_version:
+        raise ValueError("Release tag must include a version after 'v'")
+    return tag_version
+
+
+def ensure_tag_matches_version(tag: str, package_version: str) -> None:
+    tag_version = get_tag_version(tag)
+    if tag_version != package_version:
+        raise ValueError(
+            f"Release tag version {tag_version!r} does not match package version "
+            f"{package_version!r}",
+        )
+
+
 def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
     url = f"https://pypi.org/pypi/{package_name}/{package_version}/json"
     request = urllib.request.Request(
@@ -55,7 +73,7 @@ def version_exists_on_pypi(package_name: str, package_version: str) -> bool:
         headers={"User-Agent": "multidict-release-check"},
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             return response.status == 200
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
@@ -77,11 +95,14 @@ def main() -> int:
         type=Path,
     )
     parser.add_argument("--github-output", type=Path)
+    parser.add_argument("--tag")
     args = parser.parse_args()
 
     package_name, package_version = get_package_metadata(args.project_root)
-    exists = version_exists_on_pypi(package_name, package_version)
+    if args.tag is not None:
+        ensure_tag_matches_version(args.tag, package_version)
 
+    exists = version_exists_on_pypi(package_name, package_version)
     outputs = {
         "package_name": package_name,
         "package_version": package_version,
