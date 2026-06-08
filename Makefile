@@ -1,5 +1,5 @@
 # Some simple testing tasks (sorry, UNIX only).
-.PHONY: all build test vtest cov clean doc
+.PHONY: all build test vtest cov clean doc precommit-install
 
 
 PYXS = $(wildcard multidict/*.pyx)
@@ -48,6 +48,9 @@ install:
 
 install-dev: .develop
 
+precommit-install:
+	pip install pre-commit
+	pre-commit install
 
 clean:
 	rm -rf `find . -name __pycache__`

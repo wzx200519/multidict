@@ -1,0 +1,213 @@
+diff --git a/.pre-commit-config.yaml b/.pre-commit-config.yaml
+index 584bb79..b20b55b 100644
+--- a/.pre-commit-config.yaml
++++ b/.pre-commit-config.yaml
+@@ -1,165 +1,44 @@
+----
+-
+ ci:
+   autoupdate_schedule: quarterly
+ 
+ repos:
+-- repo: https://github.com/python-jsonschema/check-jsonschema.git
+-  rev: 0.32.1
+-  hooks:
+-  - id: check-github-workflows
+-    files: ^\.github/workflows/[^/]+$
+-    types:
+-    - yaml
+-  - id: check-jsonschema
+-    alias: check-github-workflows-timeout
+-    name: Check GitHub Workflows set timeout-minutes
+-    args:
+-    - --builtin-schema
+-    - github-workflows-require-timeout
+-    files: ^\.github/workflows/[^/]+$
+-    types:
+-    - yaml
+-  - id: check-readthedocs
+-
+-- repo: https://github.com/adrienverge/yamllint.git
+-  rev: v1.37.0
+-  hooks:
+-  - id: yamllint
+-    args:
+-    - --strict
+-
+ - repo: https://github.com/astral-sh/ruff-pre-commit
+-  # Ruff version.
+   rev: v0.15.8
+   hooks:
+   - id: ruff-check
+-    # Uses the [tool.ruff] config in pyproject.toml. ``--fix`` is on
+-    # so the ``I`` (import sorting) rule applies on commit; runs before
+-    # ruff-format. See:
+-    # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+     args:
+-    - --exit-non-zero-on-fix
+     - --fix
++    - --exit-non-zero-on-fix
+     - --show-fixes
+-    exclude: >-
+-      (?x)
+-      ^
+-        tools/upgrade_pythoncapi\.py
+-      $
+   - id: ruff-format
+-    exclude: >-
+-      (?x)
+-      ^
+-        tools/upgrade_pythoncapi\.py
+-      $
+ 
+-- repo: local
+-  hooks:
+-  - id: top-level-tests-init-py
+-    name: there must be not top-level `__init__.py` in `tests/`
+-    language: fail
+-    entry: >-
+-      The `tests/__init__.py` module must not exist so `pytest` doesn't add the
+-      project root to `sys.path` / `$PYTHONPATH`
+-    files: >-
+-      (?x)
+-      ^
+-        tests/__init__\.py
+-      $
+-    types: []
+-    types_or:
+-    - file
+-    - symlink
+-  - id: changelogs-rst
+-    name: changelog filenames
+-    language: fail
+-    entry: >-
+-      Changelog files must be named
+-      ####.(
+-      bugfix
+-      | feature
+-      | deprecation
+-      | breaking
+-      | doc
+-      | packaging
+-      | contrib
+-      | misc
+-      )(.#)?(.rst)?
+-    exclude: >-
+-      (?x)
+-      ^
+-        CHANGES/(
+-          \.gitignore
+-          |(\d+|[0-9a-f]{8}|[0-9a-f]{7}|[0-9a-f]{40})\.(
+-            bugfix
+-            |feature
+-            |deprecation
+-            |breaking
+-            |doc
+-            |packaging
+-            |contrib
+-            |misc
+-          )(\.\d+)?(\.rst)?
+-          |README\.rst
+-          |\.TEMPLATE\.rst
+-        )
+-      $
+-    files: ^CHANGES/
+-    types: []
+-    types_or:
+-    - file
+-    - symlink
+-  - id: changelogs-user-role
+-    name: Changelog files should use a non-broken :user:`name` role
+-    language: pygrep
+-    entry: :user:([^`]+`?|`[^`]+[\s,])
+-    pass_filenames: true
+-    types:
+-    - file
+-    - rst
+-- repo: https://github.com/pre-commit/mirrors-clang-format
+-  rev: v16.0.6
+-  hooks:
+-  - id: clang-format
+-    types_or: [c, c++]
+ - repo: https://github.com/pre-commit/mirrors-mypy.git
+   rev: v1.15.0
+   hooks:
+   - id: mypy
+-    alias: mypy-py313
+-    name: MyPy, for Python 3.13
+     additional_dependencies:
+     - types-docutils
+-    - lxml  # dep of `--txt-report`, `--cobertura-xml-report` & `--html-report`
+-    - pytest >= 8.4.0
+-    - pytest_codspeed
+-    - Sphinx >= 5.3.0
+-    - sphinxcontrib-spelling
+-    - types-psutil
+-    - psutil
++    - pytest
+     args:
+-    - --python-version=3.13
+-    - --txt-report=.tox/.tmp/.mypy/python-3.13
+-    - --cobertura-xml-report=.tox/.tmp/.mypy/python-3.13
+-    - --html-report=.tox/.tmp/.mypy/python-3.13
++    - --follow-imports=skip
+     pass_filenames: false
+-  - id: mypy
+-    alias: mypy-py311
+-    name: MyPy, for Python 3.11
+-    additional_dependencies:
+-    - types-docutils
+-    - lxml  # dep of `--txt-report`, `--cobertura-xml-report` & `--html-report`
+-    - pytest >= 8.4.0
+-    - pytest_codspeed
+-    - Sphinx >= 5.3.0, < 8.0.0  # Sphinx 8 requires Python 3.12+
+-    - sphinxcontrib-spelling
+-    - types-psutil
+-    - psutil
++
++- repo: https://github.com/pre-commit/mirrors-clang-format
++  rev: v16.0.6
++  hooks:
++  - id: clang-format
++    files: \.(c|h)$
++
++- repo: https://github.com/adrienverge/yamllint.git
++  rev: v1.37.0
++  hooks:
++  - id: yamllint
+     args:
+-    - --python-version=3.11
+-    - --txt-report=.tox/.tmp/.mypy/python-3.11
+-    - --cobertura-xml-report=.tox/.tmp/.mypy/python-3.11
+-    - --html-report=.tox/.tmp/.mypy/python-3.11
+-    pass_filenames: false
+-...
++    - --strict
++    files: >-
++      (?x)^(
++        \.github/workflows/[^/]+
++        |\.codecov\.yml
++        |\.readthedocs\.yml
++        |\.pre-commit-config\.yaml
++      )$
+diff --git a/Makefile b/Makefile
+index 2960610..613d90b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,5 +1,5 @@
+ # Some simple testing tasks (sorry, UNIX only).
+-.PHONY: all build test vtest cov clean doc
++.PHONY: all build test vtest cov clean doc precommit-install
+ 
+ 
+ PYXS = $(wildcard multidict/*.pyx)
+@@ -48,6 +48,9 @@ install:
+ 
+ install-dev: .develop
+ 
++precommit-install:
++	pip install pre-commit
++	pre-commit install
+ 
+ clean:
+ 	rm -rf `find . -name __pycache__`
