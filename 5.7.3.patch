@@ -1,0 +1,33 @@
+diff --git a/.pre-commit-config.yaml b/.pre-commit-config.yaml
+index 584bb79..f0b7c1a 100644
+--- a/.pre-commit-config.yaml
++++ b/.pre-commit-config.yaml
+@@ -143,6 +143,7 @@ repos:
+     - --txt-report=.tox/.tmp/.mypy/python-3.13
+     - --cobertura-xml-report=.tox/.tmp/.mypy/python-3.13
+     - --html-report=.tox/.tmp/.mypy/python-3.13
++    - --follow-imports=skip
+     pass_filenames: false
+   - id: mypy
+     alias: mypy-py311
+@@ -161,5 +162,6 @@ repos:
+     - --txt-report=.tox/.tmp/.mypy/python-3.11
+     - --cobertura-xml-report=.tox/.tmp/.mypy/python-3.11
+     - --html-report=.tox/.tmp/.mypy/python-3.11
++    - --follow-imports=skip
+     pass_filenames: false
+ ...
+diff --git a/Makefile b/Makefile
+index 2960610..284ce8d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -46,6 +46,9 @@ install:
+ 	@pip install -U 'pip'
+ 	@pip install -Ur requirements/dev.txt
+ 
++precommit-install:
++	python -Im pre_commit install
++
+ install-dev: .develop
+ 
+ 

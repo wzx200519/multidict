@@ -46,6 +46,9 @@ install:
 	@pip install -U 'pip'
 	@pip install -Ur requirements/dev.txt
 
+precommit-install:
+	python -Im pre_commit install
+
 install-dev: .develop
 
 
