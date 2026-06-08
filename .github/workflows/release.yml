@@ -1,0 +1,151 @@
+---
+
+name: Release
+
+on:
+  push:
+    tags:
+    - v*
+
+env:
+  FORCE_COLOR: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_PYTHON_VERSION_WARNING: "1"
+  PROJECT_NAME: multidict
+
+jobs:
+
+  check-version:
+    name: 🔍 Check version not already on PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.x
+    - name: Verify version is not already published
+      run: python .github/scripts/check-version.py "${{ github.ref_name }}"
+
+  build-sdist:
+    name: 📦 Build sdist & pure-python wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+    - check-version
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.x
+    - name: Install build frontend
+      run: python -Im pip install build
+    - name: Build sdist and pure-python wheel
+      env:
+        MULTIDICT_NO_EXTENSIONS: Y
+      run: python -Im build
+    - name: Upload distributions
+      uses: actions/upload-artifact@v7
+      with:
+        name: dists-sdist
+        path: dist/
+        retention-days: 7
+
+  build-wheels-linux:
+    name: 📦 Build Linux wheels (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    needs:
+    - check-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - arch: x86_64
+          runner: ubuntu-latest
+          cibw_archs: x86_64
+          qemu: false
+        - arch: aarch64
+          runner: ubuntu-24.04-arm
+          cibw_archs: aarch64
+          qemu: false
+        - arch: armv7l
+          runner: ubuntu-24.04-arm
+          cibw_archs: armv7l
+          qemu: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Set up QEMU
+      if: matrix.qemu
+      uses: docker/setup-qemu-action@v4
+      with:
+        platforms: all
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v3.4.1
+      with:
+        extras: uv
+      env:
+        CIBW_ARCHS_LINUX: ${{ matrix.cibw_archs }}
+        CIBW_BUILD_FRONTEND: >-
+          ${{ matrix.qemu && 'build' || 'build[uv]' }}
+    - name: Upload wheels
+      uses: actions/upload-artifact@v7
+      with:
+        name: dists-linux-${{ matrix.arch }}
+        path: ./wheelhouse/*.whl
+        retention-days: 7
+
+  build-wheels-macos:
+    name: 📦 Build macOS wheels
+    runs-on: macos-latest
+    timeout-minutes: 30
+    needs:
+    - check-version
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Build wheels
+      uses: pypa/cibuildwheel@v3.4.1
+      with:
+        extras: uv
+      env:
+        CIBW_ARCHS_MACOS: x86_64 arm64 universal2
+    - name: Upload wheels
+      uses: actions/upload-artifact@v7
+      with:
+        name: dists-macos
+        path: ./wheelhouse/*.whl
+        retention-days: 7
+
+  publish:
+    name: 🚀 Publish to PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+    - build-sdist
+    - build-wheels-linux
+    - build-wheels-macos
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ env.PROJECT_NAME }}
+    steps:
+    - name: Download all distributions
+      uses: actions/download-artifact@v8
+      with:
+        pattern: dists-*
+        merge-multiple: true
+        path: dist
+    - name: List distributions
+      run: ls -lh dist/
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_TOKEN }}
