@@ -23,12 +23,12 @@ from typing import (
     overload,
 )
 
-from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
-
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self
+
+from multidict._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
 
 
 class istr(str):
@@ -642,6 +642,22 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         self._keys = md._keys.clone()
         self._used = md._used
 
+    def _getall_values(self, identity: str, hash_: int) -> list[_V]:
+        values = []
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                values.append(e.value)
+        return values
+
+    def _getall_result(
+        self, key: str, values: list[_V], default: _T | _SENTINEL
+    ) -> list[_V] | _T:
+        if values:
+            return values
+        if default is not sentinel:
+            return default
+        raise KeyError(f"Key not found: {key!r}")
+
     @overload
     def getall(self, key: str) -> list[_V]: ...
     @overload
@@ -650,22 +666,8 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         """Return a list of all values matching the key."""
         identity = self._identity(key)
         hash_ = hash(identity)
-        res = []
-        restore = []
-        for slot, idx, e in self._keys.iter_hash(hash_):
-            if e.identity == identity:  # pragma: no branch
-                res.append(e.value)
-                e.hash = -1
-                restore.append(idx)
-
-        if res:
-            entries = self._keys.entries
-            for idx in restore:
-                entries[idx].hash = hash_  # type: ignore[union-attr]
-            return res
-        if not res and default is not sentinel:
-            return default
-        raise KeyError(f"Key not found: {key!r}")
+        values = self._getall_values(identity, hash_)
+        return self._getall_result(key, values, default)
 
     @overload
     def getone(self, key: str) -> _V: ...
