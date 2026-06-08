@@ -1,0 +1,115 @@
+diff --git a/multidict/__init__.py b/multidict/__init__.py
+index 653494f..e672d50 100644
+--- a/multidict/__init__.py
++++ b/multidict/__init__.py
+@@ -8,8 +8,8 @@ several values for the same key.
+ 
+ from typing import TYPE_CHECKING
+ 
+-from ._abc import MultiMapping, MutableMultiMapping
+-from ._compat import USE_EXTENSIONS
++from multidict._abc import MultiMapping, MutableMultiMapping
++from multidict._compat import USE_EXTENSIONS
+ 
+ __all__ = (
+     "CIMultiDict",
+@@ -27,7 +27,7 @@ __version__ = "6.7.2.dev0"
+ 
+ 
+ if TYPE_CHECKING or not USE_EXTENSIONS:
+-    from ._multidict_py import (
++    from multidict._multidict_py import (
+         CIMultiDict,
+         CIMultiDictProxy,
+         MultiDict,
+@@ -38,7 +38,7 @@ if TYPE_CHECKING or not USE_EXTENSIONS:
+ else:
+     from collections.abc import ItemsView, KeysView, ValuesView
+ 
+-    from ._multidict import (
++    from multidict._multidict import (
+         CIMultiDict,
+         CIMultiDictProxy,
+         MultiDict,
+diff --git a/multidict/_abc.py b/multidict/_abc.py
+index 66b2597..8a204e1 100644
+--- a/multidict/_abc.py
++++ b/multidict/_abc.py
+@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping, MutableMapping
+ from typing import TYPE_CHECKING, Protocol, TypeVar, Union, overload
+ 
+ if TYPE_CHECKING:
+-    from ._multidict_py import istr
++    from multidict._multidict_py import istr
+ else:
+     istr = str
+ 
+diff --git a/multidict/_compat.py b/multidict/_compat.py
+index 264d327..b55e71f 100644
+--- a/multidict/_compat.py
++++ b/multidict/_compat.py
+@@ -9,7 +9,7 @@ USE_EXTENSIONS = not NO_EXTENSIONS and not PYPY
+ 
+ if USE_EXTENSIONS:
+     try:
+-        from . import _multidict  # type: ignore[attr-defined]  # noqa: F401
++        from multidict import _multidict  # type: ignore[attr-defined]  # noqa: F401
+     except ImportError:  # pragma: no cover
+         # FIXME: Refactor for coverage. See #837.
+         USE_EXTENSIONS = False
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..5194f30 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -23,7 +23,7 @@ from typing import (
+     overload,
+ )
+ 
+-from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
++from multidict._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
+ 
+ if sys.version_info >= (3, 11):
+     from typing import Self
+@@ -642,6 +642,21 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+         self._keys = md._keys.clone()
+         self._used = md._used
+ 
++    def _find_all_values(self, identity: str, hash_: int) -> tuple[list[_V], list[int]]:
++        res = []
++        restore = []
++        for slot, idx, e in self._keys.iter_hash(hash_):
++            if e.identity == identity:  # pragma: no branch
++                res.append(e.value)
++                e.hash = -1
++                restore.append(idx)
++        return res, restore
++
++    def _restore_hashes(self, hash_: int, restore: list[int]) -> None:
++        entries = self._keys.entries
++        for idx in restore:
++            entries[idx].hash = hash_  # type: ignore[union-attr]
++
+     @overload
+     def getall(self, key: str) -> list[_V]: ...
+     @overload
+@@ -650,18 +665,10 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+         """Return a list of all values matching the key."""
+         identity = self._identity(key)
+         hash_ = hash(identity)
+-        res = []
+-        restore = []
+-        for slot, idx, e in self._keys.iter_hash(hash_):
+-            if e.identity == identity:  # pragma: no branch
+-                res.append(e.value)
+-                e.hash = -1
+-                restore.append(idx)
++        res, restore = self._find_all_values(identity, hash_)
+ 
+         if res:
+-            entries = self._keys.entries
+-            for idx in restore:
+-                entries[idx].hash = hash_  # type: ignore[union-attr]
++            self._restore_hashes(hash_, restore)
+             return res
+         if not res and default is not sentinel:
+             return default

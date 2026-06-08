@@ -8,8 +8,8 @@ several values for the same key.
 
 from typing import TYPE_CHECKING
 
-from ._abc import MultiMapping, MutableMultiMapping
-from ._compat import USE_EXTENSIONS
+from multidict._abc import MultiMapping, MutableMultiMapping
+from multidict._compat import USE_EXTENSIONS
 
 __all__ = (
     "CIMultiDict",
@@ -27,7 +27,7 @@ __version__ = "6.7.2.dev0"
 
 
 if TYPE_CHECKING or not USE_EXTENSIONS:
-    from ._multidict_py import (
+    from multidict._multidict_py import (
         CIMultiDict,
         CIMultiDictProxy,
         MultiDict,
@@ -38,7 +38,7 @@ if TYPE_CHECKING or not USE_EXTENSIONS:
 else:
     from collections.abc import ItemsView, KeysView, ValuesView
 
-    from ._multidict import (
+    from multidict._multidict import (
         CIMultiDict,
         CIMultiDictProxy,
         MultiDict,

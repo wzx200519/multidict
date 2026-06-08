@@ -23,7 +23,7 @@ from typing import (
     overload,
 )
 
-from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
+from multidict._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -642,6 +642,21 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         self._keys = md._keys.clone()
         self._used = md._used
 
+    def _find_all_values(self, identity: str, hash_: int) -> tuple[list[_V], list[int]]:
+        res = []
+        restore = []
+        for slot, idx, e in self._keys.iter_hash(hash_):
+            if e.identity == identity:  # pragma: no branch
+                res.append(e.value)
+                e.hash = -1
+                restore.append(idx)
+        return res, restore
+
+    def _restore_hashes(self, hash_: int, restore: list[int]) -> None:
+        entries = self._keys.entries
+        for idx in restore:
+            entries[idx].hash = hash_  # type: ignore[union-attr]
+
     @overload
     def getall(self, key: str) -> list[_V]: ...
     @overload
@@ -650,18 +665,10 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
         """Return a list of all values matching the key."""
         identity = self._identity(key)
         hash_ = hash(identity)
-        res = []
-        restore = []
-        for slot, idx, e in self._keys.iter_hash(hash_):
-            if e.identity == identity:  # pragma: no branch
-                res.append(e.value)
-                e.hash = -1
-                restore.append(idx)
+        res, restore = self._find_all_values(identity, hash_)
 
         if res:
-            entries = self._keys.entries
-            for idx in restore:
-                entries[idx].hash = hash_  # type: ignore[union-attr]
+            self._restore_hashes(hash_, restore)
             return res
         if not res and default is not sentinel:
             return default
