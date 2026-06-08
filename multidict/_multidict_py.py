@@ -23,12 +23,12 @@ from typing import (
     overload,
 )
 
-from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
-
 if sys.version_info >= (3, 11):
     from typing import Self
 else:
     from typing_extensions import Self
+
+from multidict._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
 
 
 class istr(str):
@@ -648,6 +648,14 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
     def getall(self, key: str, default: _T) -> list[_V] | _T: ...
     def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
         """Return a list of all values matching the key."""
+        res = self._collect_values_for_key(key)
+        if res:
+            return res
+        if default is not sentinel:
+            return default
+        raise KeyError(f"Key not found: {key!r}")
+
+    def _collect_values_for_key(self, key: str) -> list[_V]:
         identity = self._identity(key)
         hash_ = hash(identity)
         res = []
@@ -657,15 +665,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
                 res.append(e.value)
                 e.hash = -1
                 restore.append(idx)
-
         if res:
             entries = self._keys.entries
             for idx in restore:
                 entries[idx].hash = hash_  # type: ignore[union-attr]
-            return res
-        if not res and default is not sentinel:
-            return default
-        raise KeyError(f"Key not found: {key!r}")
+        return res
 
     @overload
     def getone(self, key: str) -> _V: ...

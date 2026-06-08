@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping, MutableMapping
 from typing import TYPE_CHECKING, Protocol, TypeVar, Union, overload
 
 if TYPE_CHECKING:
-    from ._multidict_py import istr
+    from multidict._multidict_py import istr
 else:
     istr = str
 

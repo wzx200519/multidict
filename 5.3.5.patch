@@ -1,0 +1,111 @@
+diff --git a/multidict/__init__.py b/multidict/__init__.py
+index 653494f..e672d50 100644
+--- a/multidict/__init__.py
++++ b/multidict/__init__.py
+@@ -8,8 +8,8 @@ several values for the same key.
+ 
+ from typing import TYPE_CHECKING
+ 
+-from ._abc import MultiMapping, MutableMultiMapping
+-from ._compat import USE_EXTENSIONS
++from multidict._abc import MultiMapping, MutableMultiMapping
++from multidict._compat import USE_EXTENSIONS
+ 
+ __all__ = (
+     "CIMultiDict",
+@@ -27,7 +27,7 @@ __version__ = "6.7.2.dev0"
+ 
+ 
+ if TYPE_CHECKING or not USE_EXTENSIONS:
+-    from ._multidict_py import (
++    from multidict._multidict_py import (
+         CIMultiDict,
+         CIMultiDictProxy,
+         MultiDict,
+@@ -38,7 +38,7 @@ if TYPE_CHECKING or not USE_EXTENSIONS:
+ else:
+     from collections.abc import ItemsView, KeysView, ValuesView
+ 
+-    from ._multidict import (
++    from multidict._multidict import (
+         CIMultiDict,
+         CIMultiDictProxy,
+         MultiDict,
+diff --git a/multidict/_abc.py b/multidict/_abc.py
+index 66b2597..8a204e1 100644
+--- a/multidict/_abc.py
++++ b/multidict/_abc.py
+@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping, MutableMapping
+ from typing import TYPE_CHECKING, Protocol, TypeVar, Union, overload
+ 
+ if TYPE_CHECKING:
+-    from ._multidict_py import istr
++    from multidict._multidict_py import istr
+ else:
+     istr = str
+ 
+diff --git a/multidict/_compat.py b/multidict/_compat.py
+index 264d327..2f26331 100644
+--- a/multidict/_compat.py
++++ b/multidict/_compat.py
+@@ -9,7 +9,7 @@ USE_EXTENSIONS = not NO_EXTENSIONS and not PYPY
+ 
+ if USE_EXTENSIONS:
+     try:
+-        from . import _multidict  # type: ignore[attr-defined]  # noqa: F401
++        import multidict._multidict  # type: ignore[attr-defined]  # noqa: F401
+     except ImportError:  # pragma: no cover
+         # FIXME: Refactor for coverage. See #837.
+         USE_EXTENSIONS = False
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..19d1c68 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -23,13 +23,13 @@ from typing import (
+     overload,
+ )
+ 
+-from ._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
+-
+ if sys.version_info >= (3, 11):
+     from typing import Self
+ else:
+     from typing_extensions import Self
+ 
++from multidict._abc import MDArg, MultiMapping, MutableMultiMapping, SupportsKeys
++
+ 
+ class istr(str):
+     """Case insensitive str."""
+@@ -648,6 +648,14 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+     def getall(self, key: str, default: _T) -> list[_V] | _T: ...
+     def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
+         """Return a list of all values matching the key."""
++        res = self._collect_values_for_key(key)
++        if res:
++            return res
++        if default is not sentinel:
++            return default
++        raise KeyError(f"Key not found: {key!r}")
++
++    def _collect_values_for_key(self, key: str) -> list[_V]:
+         identity = self._identity(key)
+         hash_ = hash(identity)
+         res = []
+@@ -657,15 +665,11 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+                 res.append(e.value)
+                 e.hash = -1
+                 restore.append(idx)
+-
+         if res:
+             entries = self._keys.entries
+             for idx in restore:
+                 entries[idx].hash = hash_  # type: ignore[union-attr]
+-            return res
+-        if not res and default is not sentinel:
+-            return default
+-        raise KeyError(f"Key not found: {key!r}")
++        return res
+ 
+     @overload
+     def getone(self, key: str) -> _V: ...
