@@ -274,13 +274,10 @@ multidict_getall(MultiDictObject *self, PyObject *const *args,
         if (_default != NULL) {
             Py_INCREF(_default);
             return _default;
-        } else {
-            PyErr_SetObject(PyExc_KeyError, key);
-            return NULL;
         }
-    } else {
-        return list;
+        return PyList_New(0);
     }
+    return list;
 }
 
 static inline PyObject *

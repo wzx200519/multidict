@@ -1,0 +1,114 @@
+diff --git a/docs/multidict.rst b/docs/multidict.rst
+index 7d192ad..7348503 100644
+--- a/docs/multidict.rst
++++ b/docs/multidict.rst
+@@ -85,7 +85,7 @@ MultiDict
+       Return a list of all values for *key* if *key* is in the
+       dictionary, else *default*.
+ 
+-      Raises :exc:`KeyError` if *default* is not given and *key* is not found.
++      If *default* is not given and *key* is not found, return an empty list.
+ 
+    .. method:: get(key[, default])
+ 
+@@ -315,7 +315,7 @@ MultiDictProxy
+       Return a list of all values for *key* if *key* is in the
+       dictionary, else *default*.
+ 
+-      Raises :exc:`KeyError` if *default* is not given and *key* is not found.
++      If *default* is not given and *key* is not found, return an empty list.
+ 
+    .. method:: get(key[, default])
+ 
+diff --git a/multidict/_multidict.c b/multidict/_multidict.c
+index 73c0022..111397d 100644
+--- a/multidict/_multidict.c
++++ b/multidict/_multidict.c
+@@ -274,13 +274,10 @@ multidict_getall(MultiDictObject *self, PyObject *const *args,
+         if (_default != NULL) {
+             Py_INCREF(_default);
+             return _default;
+-        } else {
+-            PyErr_SetObject(PyExc_KeyError, key);
+-            return NULL;
+         }
+-    } else {
+-        return list;
++        return PyList_New(0);
+     }
++    return list;
+ }
+ 
+ static inline PyObject *
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..3753b5a 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -663,9 +663,9 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+             for idx in restore:
+                 entries[idx].hash = hash_  # type: ignore[union-attr]
+             return res
+-        if not res and default is not sentinel:
++        if default is not sentinel:
+             return default
+-        raise KeyError(f"Key not found: {key!r}")
++        return res
+ 
+     @overload
+     def getone(self, key: str) -> _V: ...
+diff --git a/tests/test_multidict.py b/tests/test_multidict.py
+index d62db8c..e6ea5dc 100644
+--- a/tests/test_multidict.py
++++ b/tests/test_multidict.py
+@@ -765,9 +765,8 @@ class TestMultiDict(BaseMultiDictTest):
+         assert len(d) == 2
+ 
+         assert d.getall("key") == ["value1", "value2"]
+-
+-        with pytest.raises(KeyError, match="some_key"):
+-            d.getall("some_key")
++        assert d.getall("some_key") == []
++        assert d.getall("some_key", None) is None
+ 
+         default = object()
+         assert d.getall("some_key", default) is default
+@@ -856,9 +855,8 @@ class TestCIMultiDict(BaseMultiDictTest):
+         assert len(d) == 2
+ 
+         assert d.getall("key") == ["value1", "value2"]
+-
+-        with pytest.raises(KeyError, match="some_key"):
+-            d.getall("some_key")
++        assert d.getall("some_key") == []
++        assert d.getall("some_key", None) is None
+ 
+     def test_get(self, cls: type[CIMultiDict[int]]) -> None:
+         d = cls([("A", 1), ("a", 2)])
+diff --git a/tests/test_mutable_multidict.py b/tests/test_mutable_multidict.py
+index 53b46a8..f1e0f1e 100644
+--- a/tests/test_mutable_multidict.py
++++ b/tests/test_mutable_multidict.py
+@@ -45,9 +45,8 @@ class TestMutableMultiDict:
+         assert len(d) == 2
+ 
+         assert d.getall("key") == ["value1", "value2"]
+-
+-        with pytest.raises(KeyError, match="some_key"):
+-            d.getall("some_key")
++        assert d.getall("some_key") == []
++        assert d.getall("some_key", None) is None
+ 
+         default = object()
+         assert d.getall("some_key", default) is default
+@@ -485,9 +484,8 @@ class TestCIMutableMultiDict:
+         assert len(d) == 2
+ 
+         assert d.getall("key") == ["value1", "value2"]
+-
+-        with pytest.raises(KeyError, match="some_key"):
+-            d.getall("some_key")
++        assert d.getall("some_key") == []
++        assert d.getall("some_key", None) is None
+ 
+     def test_ctor(
+         self,
