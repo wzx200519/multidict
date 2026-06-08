@@ -1,0 +1,140 @@
+diff --git a/.github/scripts/check_version.py b/.github/scripts/check_version.py
+new file mode 100644
+index 0000000..a99bac2
+--- /dev/null
++++ b/.github/scripts/check_version.py
+@@ -0,0 +1,48 @@
++import os
++import sys
++import json
++import urllib.request
++import urllib.error
++
++def main():
++    package_name = "multidict"
++    github_ref = os.environ.get("GITHUB_REF", "")
++    
++    if not github_ref.startswith("refs/tags/v"):
++        print(f"Ref {github_ref} is not a valid version tag (should start with refs/tags/v).")
++        sys.exit(1)
++        
++    version = github_ref.split("/")[-1].lstrip("v")
++    print(f"Checking if {package_name} version {version} exists on PyPI...")
++    
++    url = f"https://pypi.org/pypi/{package_name}/json"
++    
++    try:
++        req = urllib.request.Request(url)
++        with urllib.request.urlopen(req) as response:
++            data = json.loads(response.read().decode())
++            releases = data.get("releases", {})
++            
++            if version in releases:
++                print(f"Version {version} already exists on PyPI. Skipping release.")
++                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
++                    f.write("exists=true\n")
++            else:
++                print(f"Version {version} does not exist on PyPI. Proceeding with release.")
++                with open(os.environ["GITHUB_OUTPUT"], "a") as f:
++                    f.write("exists=false\n")
++                    
++    except urllib.error.HTTPError as e:
++        if e.code == 404:
++            print(f"Package {package_name} not found on PyPI. Proceeding with initial release.")
++            with open(os.environ["GITHUB_OUTPUT"], "a") as f:
++                f.write("exists=false\n")
++        else:
++            print(f"Failed to fetch PyPI data: HTTP {e.code}")
++            sys.exit(1)
++    except Exception as e:
++        print(f"An error occurred: {e}")
++        sys.exit(1)
++
++if __name__ == "__main__":
++    main()
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+new file mode 100644
+index 0000000..75e36f8
+--- /dev/null
++++ b/.github/workflows/release.yml
+@@ -0,0 +1,77 @@
++name: Release
++
++on:
++  push:
++    tags:
++      - 'v*'
++
++jobs:
++  check-version:
++    name: Check Version Exists
++    runs-on: ubuntu-latest
++    outputs:
++      exists: ${{ steps.check.outputs.exists }}
++    steps:
++      - name: Checkout code
++        uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: '3.11'
++
++      - name: Check if version exists on PyPI
++        id: check
++        run: python .github/scripts/check_version.py
++
++  build-wheels:
++    name: Build Wheels
++    needs: check-version
++    if: needs.check-version.outputs.exists != 'true'
++    runs-on: ${{ matrix.os }}
++    strategy:
++      matrix:
++        os: [ubuntu-latest, macos-latest]
++
++    steps:
++      - name: Checkout code
++        uses: actions/checkout@v4
++
++      - name: Set up QEMU
++        if: runner.os == 'Linux'
++        uses: docker/setup-qemu-action@v3
++        with:
++          platforms: all
++
++      - name: Build wheels
++        uses: pypa/cibuildwheel@v2.22.0
++        env:
++          CIBW_BUILD_FRONTEND: "build[uv]"
++          CIBW_ARCHS_LINUX: "x86_64 aarch64 armv7l"
++          CIBW_ARCHS_MACOS: "x86_64 arm64"
++        with:
++          output-dir: wheelhouse
++
++      - name: Upload wheels
++        uses: actions/upload-artifact@v4
++        with:
++          name: wheels-${{ matrix.os }}
++          path: ./wheelhouse/*.whl
++
++  publish:
++    name: Publish to PyPI
++    needs: build-wheels
++    runs-on: ubuntu-latest
++    steps:
++      - name: Download wheels
++        uses: actions/download-artifact@v4
++        with:
++          pattern: wheels-*
++          path: dist
++          merge-multiple: true
++
++      - name: Publish package to PyPI
++        uses: pypa/gh-action-pypi-publish@release/v1
++        with:
++          password: ${{ secrets.PYPI_TOKEN }}
++          packages-dir: dist/
+diff --git a/5.1.3.patch b/5.1.3.patch
+new file mode 100644
+index 0000000..e69de29
