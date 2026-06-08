@@ -1,0 +1,68 @@
+diff --git a/multidict/_multidict_py.py b/multidict/_multidict_py.py
+index e286713..c1af0a7 100644
+--- a/multidict/_multidict_py.py
++++ b/multidict/_multidict_py.py
+@@ -988,9 +988,44 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
+         self._incr_version()
+         return ret
+ 
++    def _parse_update_args(
++        self,
++        arg: MDArg[_V],
++        kwargs: Mapping[str, _V],
++    ) -> Iterator[int | _Entry[_V]]:
++        if arg and not isinstance(arg, (MultiDict, MultiDictProxy)) and hasattr(arg, "keys"):
++            items: list[_Entry[_V]] = []
++            positions: dict[str, int] = {}
++            identity_func = self._identity
++            arg = cast(SupportsKeys[_V], arg)
++
++            for key in arg.keys():
++                identity = identity_func(key)
++                entry = _Entry(hash(identity), identity, key, arg[key])
++                if identity in positions:
++                    items[positions[identity]] = entry
++                else:
++                    positions[identity] = len(items)
++                    items.append(entry)
++
++            for key, value in kwargs.items():
++                identity = identity_func(key)
++                entry = _Entry(hash(identity), identity, key, value)
++                if identity in positions:
++                    items[positions[identity]] = entry
++                else:
++                    positions[identity] = len(items)
++                    items.append(entry)
++
++            yield len(items)
++            yield from items
++            return
++
++        yield from self._parse_args(arg, kwargs)
++
+     def update(self, arg: MDArg[_V] = None, /, **kwargs: _V) -> None:
+         """Update the dictionary, overwriting existing keys."""
+-        it = self._parse_args(arg, kwargs)
++        it = self._parse_update_args(arg, kwargs)
+         newsize = self._used + cast(int, next(it))
+         log2_size = estimate_log2_keysize(newsize)
+         if log2_size > 17:  # pragma: no cover
+diff --git a/tests/test_update.py b/tests/test_update.py
+index a552bd8..4fbde75 100644
+--- a/tests/test_update.py
++++ b/tests/test_update.py
+@@ -121,6 +121,13 @@ def test_update_deque_arg_and_kwds(any_multidict_class: _MD_Classes) -> None:
+     assert arg == deque([("a", 1)])
+ 
+ 
++def test_update_kwargs_double_count(any_multidict_class: _MD_Classes) -> None:
++    obj = any_multidict_class()
++    obj.update({"a": 1, "b": 2}, a=3)
++    assert list(obj.items()) == [("a", 3), ("b", 2)]
++    assert len(obj) == 2
++
++
+ def test_update_with_second_md(any_multidict_class: _MD_Classes) -> None:
+     obj1 = any_multidict_class()
+     obj2 = any_multidict_class([("a", 2)])
