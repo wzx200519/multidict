@@ -48,6 +48,8 @@ install:
 
 install-dev: .develop
 
+precommit-install: .install-deps
+	python -Im pre_commit install
 
 clean:
 	rm -rf `find . -name __pycache__`
