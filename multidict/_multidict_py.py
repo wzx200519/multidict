@@ -646,7 +646,7 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
     def getall(self, key: str) -> list[_V]: ...
     @overload
     def getall(self, key: str, default: _T) -> list[_V] | _T: ...
-    def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
+    def getall(self, key: str, default: _T | None = None) -> list[_V] | _T:
         """Return a list of all values matching the key."""
         identity = self._identity(key)
         hash_ = hash(identity)
@@ -663,9 +663,9 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             for idx in restore:
                 entries[idx].hash = hash_  # type: ignore[union-attr]
             return res
-        if not res and default is not sentinel:
+        if default is not None:
             return default
-        raise KeyError(f"Key not found: {key!r}")
+        return []
 
     @overload
     def getone(self, key: str) -> _V: ...
@@ -1144,9 +1144,9 @@ class MultiDictProxy(_CSMixin, MultiMapping[_V]):
     def getall(self, key: str) -> list[_V]: ...
     @overload
     def getall(self, key: str, default: _T) -> list[_V] | _T: ...
-    def getall(self, key: str, default: _T | _SENTINEL = sentinel) -> list[_V] | _T:
+    def getall(self, key: str, default: _T | None = None) -> list[_V] | _T:
         """Return a list of all values matching the key."""
-        if default is not sentinel:
+        if default is not None:
             return self._md.getall(key, default)
         else:
             return self._md.getall(key)

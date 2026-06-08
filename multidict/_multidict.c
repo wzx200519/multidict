@@ -275,8 +275,7 @@ multidict_getall(MultiDictObject *self, PyObject *const *args,
             Py_INCREF(_default);
             return _default;
         } else {
-            PyErr_SetObject(PyExc_KeyError, key);
-            return NULL;
+            return PyList_New(0);
         }
     } else {
         return list;

@@ -46,8 +46,7 @@ class TestMutableMultiDict:
 
         assert d.getall("key") == ["value1", "value2"]
 
-        with pytest.raises(KeyError, match="some_key"):
-            d.getall("some_key")
+        assert d.getall("some_key") == []
 
         default = object()
         assert d.getall("some_key", default) is default
@@ -486,8 +485,7 @@ class TestCIMutableMultiDict:
 
         assert d.getall("key") == ["value1", "value2"]
 
-        with pytest.raises(KeyError, match="some_key"):
-            d.getall("some_key")
+        assert d.getall("some_key") == []
 
     def test_ctor(
         self,
