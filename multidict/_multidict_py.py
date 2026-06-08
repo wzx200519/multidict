@@ -663,9 +663,9 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             for idx in restore:
                 entries[idx].hash = hash_  # type: ignore[union-attr]
             return res
-        if not res and default is not sentinel:
+        if default is not sentinel:
             return default
-        raise KeyError(f"Key not found: {key!r}")
+        return []
 
     @overload
     def getone(self, key: str) -> _V: ...
