@@ -85,7 +85,7 @@ MultiDict
       Return a list of all values for *key* if *key* is in the
       dictionary, else *default*.
 
-      Raises :exc:`KeyError` if *default* is not given and *key* is not found.
+      Returns an empty list if *default* is not given and *key* is not found.
 
    .. method:: get(key[, default])
 
@@ -315,7 +315,7 @@ MultiDictProxy
       Return a list of all values for *key* if *key* is in the
       dictionary, else *default*.
 
-      Raises :exc:`KeyError` if *default* is not given and *key* is not found.
+      Returns an empty list if *default* is not given and *key* is not found.
 
    .. method:: get(key[, default])
 

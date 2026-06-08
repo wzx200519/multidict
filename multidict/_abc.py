@@ -32,7 +32,7 @@ class MultiMapping(Mapping[str, _V_co]):
     def getall(self, key: str, default: _T) -> list[_V_co] | _T: ...
     @abc.abstractmethod
     def getall(self, key: str, default: _T = ...) -> list[_V_co] | _T:
-        """Return all values for key."""
+        """Return all values for key. Returns an empty list if key is not found and default is not provided."""
 
     @overload
     def getone(self, key: str) -> _V_co: ...

@@ -665,7 +665,7 @@ class MultiDict(_CSMixin, MutableMultiMapping[_V]):
             return res
         if not res and default is not sentinel:
             return default
-        raise KeyError(f"Key not found: {key!r}")
+        return []
 
     @overload
     def getone(self, key: str) -> _V: ...
