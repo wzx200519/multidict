@@ -1,5 +1,5 @@
 # Some simple testing tasks (sorry, UNIX only).
-.PHONY: all build test vtest cov clean doc
+.PHONY: all build test vtest cov clean doc precommit-install
 
 
 PYXS = $(wildcard multidict/*.pyx)
@@ -13,6 +13,9 @@ all: test
 
 lint:
 	python -Im pre_commit run --all-files --show-diff-on-failure
+
+precommit-install:
+	python -Im pre_commit install
 
 .develop: .install-deps $(shell find multidict -type f)
 	pip install -e .

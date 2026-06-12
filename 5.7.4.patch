@@ -1,0 +1,33 @@
+diff --git a/.mypy.ini b/.mypy.ini
+index bfac031..02885f9 100644
+--- a/.mypy.ini
++++ b/.mypy.ini
+@@ -1,6 +1,7 @@
+ [mypy]
+ files = multidict, docs, tests
+ check_untyped_defs = True
++follow_imports = skip
+ follow_imports_for_stubs = True
+ disallow_any_decorated = True
+ disallow_any_generics = True
+diff --git a/Makefile b/Makefile
+index 2960610..e22fa12 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,5 +1,5 @@
+ # Some simple testing tasks (sorry, UNIX only).
+-.PHONY: all build test vtest cov clean doc
++.PHONY: all build test vtest cov clean doc precommit-install
+ 
+ 
+ PYXS = $(wildcard multidict/*.pyx)
+@@ -14,6 +14,9 @@ all: test
+ lint:
+ 	python -Im pre_commit run --all-files --show-diff-on-failure
+ 
++precommit-install:
++	python -Im pre_commit install
++
+ .develop: .install-deps $(shell find multidict -type f)
+ 	pip install -e .
+ 	@touch .develop
